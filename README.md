@@ -1,5 +1,3 @@
-<img src="https://r2cdn.perplexity.ai/pplx-full-logo-primary-dark%402x.png" style="height:64px;margin-right:32px"/>
-
 # readme Retouche photo V2
 
 **README.md** complet et adapté au projet Python de retouche photo façon Camera Raw, basé sur le fichier fourni.[^1]
