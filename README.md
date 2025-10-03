@@ -1,3 +1,15 @@
+# readme Retouche photo V3
+
+La version 3.0 introduit un outil de recadrage puissant et facile à utiliser :
+
+1.  **Ouvrez une image** dans l'application.
+2.  Cliquez sur le bouton **"Recadrer"**.
+3.  Une nouvelle fenêtre s'ouvre : **cliquez et déplacez votre souris** pour dessiner le rectangle de la zone que vous souhaitez conserver.
+4.  Une fois satisfait de votre sélection, appuyez sur la touche **`Entrée`** ou **`Espace`** de votre clavier pour valider.
+5.  L'image dans l'aperçu principal sera mise à jour avec le recadrage appliqué. Vous pouvez ensuite continuer les retouches ou sauvegarder le résultat.
+
+> Pour annuler le recadrage, appuyez simplement sur la touche `Échap` (ou `C`) lorsque la fenêtre de sélection est ouverte.
+
 # readme Retouche photo V2
 
 **README.md** complet et adapté au projet Python de retouche photo façon Camera Raw, basé sur le fichier fourni.[^1]
