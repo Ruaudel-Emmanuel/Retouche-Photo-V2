@@ -5,225 +5,178 @@ import cv2
 import numpy as np
 
 class CameraRawLikeEditor:
-
-    def open_image_path(self, file_path):
-        """Ouvre une image JPEG à partir d'un chemin passé en argument"""
-        
-        try:
-            img = Image.open(file_path).convert("RGB")
-            self.original_image = img
-            self.current_image = img.copy()
-            # Réinit sliders
-            self.var_expo.set(0)
-            self.var_contrast.set(1)
-            self.var_satur.set(1)
-            self.var_temp.set(0)
-            self.var_sharp.set(1)
-            # Active sliders et bouton auto
-            self.set_sliders_state("normal")
-            self.btn_auto.config(state="normal")
-            self.update_image()
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier :\n{e}")
-
     def __init__(self, root):
         self.root = root
-        self.root.title("Éditeur JPEG façon Camera Raw")
-        # Pas d'image à charger au début !
-        self.current_image = None
-        self.original_image = None
-        self.display_image = None
-        self.setup_ui()
-
-    
-    def setup_ui(self):
-        # --- Frame principale image + sliders
-        main_frame = tk.Frame(self.root)
-        main_frame.pack(fill="both", expand=True)
-
-        # --- Zone image
-        self.image_label = tk.Label(main_frame, bd=2, relief="sunken", width=480, height=360)
-        self.image_label.pack(side="left", padx=10, pady=10)
+        self.root.title("Éditeur JPEG v4 - Corrigé")
+        self.currentimage = None
+        self.originalimage = None
+        self.displayimage = None # Image pleine résolution pour la sauvegarde
+        self.sliderrefs = []
         
-        # --- Zone des boutons et sliders
-        right_frame = tk.Frame(main_frame)
-        right_frame.pack(side="right", fill="y", padx=10, pady=10)
+        # Taille maximale de l'aperçu pour un affichage cohérent
+        self.PREVIEW_MAX_SIZE = (800, 600)
 
-        # Bouton d'ouverture d'image
-        btn_open = tk.Button(right_frame, text="📁 Ouvrir une photo", command=self.open_image)
-        btn_open.pack(pady=(0,8), fill="x")
+        self.setupui()
 
-        # Bouton retouche auto (désactivé tant qu'aucune image)
-        self.btn_auto = tk.Button(right_frame, text="✨ Retouche auto", command=self.auto_enhance, state='disabled')
-        self.btn_auto.pack(pady=(0,15), fill="x")
+    def setupui(self):
+        mainframe = tk.Frame(self.root)
+        mainframe.pack(fill='both', expand=True)
 
-        # Bouton sauvegarder l'image
-        btn_save = tk.Button(right_frame, text="💾 Sauvegarder", command=self.save_image)
-        btn_save.pack(pady=(0,15), fill="x")
+        # Le label qui contiendra l'image redimensionnée
+        self.imagelabel = tk.Label(mainframe, bd=2, relief='sunken')
+        self.imagelabel.pack(side='left', fill='both', expand=True, padx=10, pady=10)
+
+        rightframe = tk.Frame(mainframe, width=200) # Frame de droite avec une largeur fixe
+        rightframe.pack(side='right', fill='y', padx=10, pady=10)
+        rightframe.pack_propagate(False) # Empêche la frame de changer de taille
+
+        btnopen = tk.Button(rightframe, text="Ouvrir une photo", command=self.openimage)
+        btnopen.pack(pady=(0, 8), fill='x')
+
+        self.btn_crop = tk.Button(rightframe, text="Recadrer", command=self.crop_image, state='disabled')
+        self.btn_crop.pack(pady=(0, 15), fill='x')
+
+        self.btnauto = tk.Button(rightframe, text="Retouche auto", command=self.autoenhance, state='disabled')
+        self.btnauto.pack(pady=(0, 15), fill='x')
         
-        # --- Définition des sliders pour réglage manuel
-        self.var_expo = tk.DoubleVar(value=0)
-        self.var_contrast = tk.DoubleVar(value=1)
-        self.var_satur = tk.DoubleVar(value=1)
-        self.var_temp = tk.DoubleVar(value=0)
-        self.var_sharp = tk.DoubleVar(value=1)
+        btnsave = tk.Button(rightframe, text="Sauvegarder", command=self.saveimage)
+        btnsave.pack(pady=(0, 15), fill='x')
 
-        sliders = [
-            ("Exposition", self.var_expo, -2, 2, 0.1),
-            ("Contraste", self.var_contrast, 0.5, 2, 0.05),
-            ("Saturation", self.var_satur, 0.5, 2, 0.05),
-            ("Température", self.var_temp, -50, 50, 1),
-            ("Netteté", self.var_sharp, 1, 3, 0.1),
+        # Variables et sliders
+        self.varexpo = tk.DoubleVar(value=0)
+        self.varcontrast = tk.DoubleVar(value=1)
+        self.varsatur = tk.DoubleVar(value=1)
+        self.vartemp = tk.DoubleVar(value=0)
+        self.varsharp = tk.DoubleVar(value=1)
+
+        sliders_data = [
+            ("Exposition", self.varexpo, -2, 2, 0.1), ("Contraste", self.varcontrast, 0.5, 2, 0.05),
+            ("Saturation", self.varsatur, 0.5, 2, 0.05), ("Température", self.vartemp, -50, 50, 1),
+            ("Netteté", self.varsharp, 1, 3, 0.1),
         ]
-        self.slider_refs = []  # Pour activer/désactiver dynamiquement
-        
-        for text, var, mn, mx, res in sliders:
-            lbl = tk.Label(right_frame, text=text)
-            lbl.pack()
-            sld = tk.Scale(right_frame, variable=var, orient="horizontal",
-                           from_=mn, to=mx, resolution=res, length=180,
-                           command=lambda v: self.update_image())
-            sld.pack(pady=(0,10))
-            self.slider_refs.append(sld)
 
-        # Sliders désactivés tant qu'il n'y a pas d'image
-        self.set_sliders_state("disabled")
+        for text, var, mn, mx, res in sliders_data:
+            lbl = tk.Label(rightframe, text=text)
+            lbl.pack(anchor='w')
+            sld = tk.Scale(rightframe, variable=var, orient='horizontal', from_=mn, to=mx, resolution=res, length=180, command=self.updateimage)
+            sld.pack(pady=(0, 10), anchor='w')
+            self.sliderrefs.append(sld)
 
-    def set_sliders_state(self, state):
-        for sld in self.slider_refs:
-            sld.config(state=state)
+        self.setslidersstate('disabled')
 
-    def open_image(self):
-        """Ouvre une image JPEG et l'affiche brute (prêt pour auto ou sliders)"""
-        ftypes = [("Fichiers JPEG", "*.jpg *.jpeg")]
-        file_path = filedialog.askopenfilename(title="Sélectionner une photo JPEG", filetypes=ftypes)
-        if not file_path:
-            return
+    def setslidersstate(self, state):
+        for sld in self.sliderrefs: sld.config(state=state)
+
+    def openimage(self):
+        filepath = filedialog.askopenfilename(title="Sélectionner une photo", filetypes=[('Fichiers JPEG', '*.jpg *.jpeg')])
+        if filepath: self.openimagepath(filepath)
+
+    def openimagepath(self, filepath):
         try:
-            img = Image.open(file_path).convert("RGB")
-            self.original_image = img
-            self.current_image = img.copy()  # Toujours partir de la version brute
-            # Réinit sliders (pour repartir à zéro)
-            self.var_expo.set(0)
-            self.var_contrast.set(1)
-            self.var_satur.set(1)
-            self.var_temp.set(0)
-            self.var_sharp.set(1)
-            # Active sliders et bouton auto
-            self.set_sliders_state("normal")
-            self.btn_auto.config(state="normal")
-            self.update_image()
+            img = Image.open(filepath).convert('RGB')
+            self.originalimage = img
+            self.currentimage = img.copy()
+
+            # Réinitialisation des sliders
+            self.varexpo.set(0); self.varcontrast.set(1); self.varsatur.set(1); self.vartemp.set(0); self.varsharp.set(1)
+
+            # Activation des contrôles
+            self.setslidersstate('normal')
+            self.btnauto.config(state='normal')
+            self.btn_crop.config(state='normal')
+            
+            self.updateimage()
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier:\n{e}")
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier : {e}")
+            
+    def crop_image(self):
+        if self.currentimage is None: return
+        
+        opencv_image = cv2.cvtColor(np.array(self.currentimage), cv2.COLOR_RGB2BGR)
+        
+        # Redimensionner l'image pour la fenêtre de sélection si elle est trop grande
+        h, w, _ = opencv_image.shape
+        max_dim = 1200 # Limite pour l'écran de sélection
+        if h > max_dim or w > max_dim:
+            scale = max_dim / max(h, w)
+            preview_img = cv2.resize(opencv_image, (int(w*scale), int(h*scale)), interpolation=cv2.INTER_AREA)
+        else:
+            scale = 1.0
+            preview_img = opencv_image
+            
+        roi = cv2.selectROI("Recadrage", preview_img, fromCenter=False, showCrosshair=True)
+        cv2.destroyAllWindows()
+        
+        if roi[2] > 0 and roi[3] > 0:
+            # Re-calculer les coordonnées pour l'image originale
+            x, y, w, h = [int(v / scale) for v in roi]
+            self.currentimage = self.currentimage.crop((x, y, x + w, y + h))
+            self.updateimage()
 
-    def auto_enhance(self):
-        """Applique la retouche automatique et recharge pour ajustements manuels"""
-        if self.original_image is None:
-            messagebox.showwarning("Aucune image", "Veuillez d'abord ouvrir une image.")
-            return
-        arr = np.array(self.original_image)
-        arr = self.process_automatically(arr)
-        self.current_image = Image.fromarray(arr)
-        # Reset sliders (on repart sur retouche à zéro)
-        self.var_expo.set(0)
-        self.var_contrast.set(1)
-        self.var_satur.set(1)
-        self.var_temp.set(0)
-        self.var_sharp.set(1)
-        self.update_image()
+    def updateimage(self, *args):
+        if self.currentimage is None: return
 
-    def save_image(self):
-        """Sauvegarde l'image affichée avec les ajustements"""
-        if self.display_image is None:
-            messagebox.showwarning("Aucune image", "Veuillez d'abord ouvrir une image.")
-            return
-        file_path = filedialog.asksaveasfilename(defaultextension=".jpg",
-                                                 filetypes=[("JPEG", "*.jpg *.jpeg")])
-        if file_path:
-            self.display_image.convert("RGB").save(file_path, "JPEG", quality=95)
-            messagebox.showinfo("Info", "Image sauvegardée.")
+        # Appliquer les retouches
+        img_processed = self.applysliders(self.currentimage.copy())
+        
+        # Conserver l'image traitée en pleine résolution pour la sauvegarde
+        self.displayimage = img_processed
 
-    def process_automatically(self, arr):
-        """Algorithme de retouche automatique (balance des blancs + niveaux/CLAHE)"""
-        arr = self.balance_white(arr)
-        arr = self.auto_levels(arr)
-        return arr
+        # Créer une copie pour l'affichage et la redimensionner
+        img_for_display = img_processed.copy()
+        img_for_display.thumbnail(self.PREVIEW_MAX_SIZE, Image.Resampling.LANCZOS)
+        
+        imgtk = ImageTk.PhotoImage(img_for_display)
+        self.imagelabel.config(image=imgtk)
+        self.imagelabel.image = imgtk # Garder une référence pour éviter la suppression par le garbage collector
 
-    def balance_white(self, img_array):
-        """Balance des blancs automatique par canal"""
-        mean = np.mean(img_array, axis=(0,1))
-        gray = mean.mean()
-        scale = gray / (mean + 1e-8)
-        img = img_array.astype(np.float32) * scale
-        img = np.clip(img, 0, 255)
-        return img.astype(np.uint8)
+    def applysliders(self, img):
+        img = ImageEnhance.Brightness(img).enhance(2**self.varexpo.get())
+        img = ImageEnhance.Contrast(img).enhance(self.varcontrast.get())
+        img = ImageEnhance.Color(img).enhance(self.varsatur.get())
+        
+        temp = self.vartemp.get()
+        if temp != 0:
+            arr = np.array(img, dtype=np.float32)
+            arr[..., 0] += temp
+            arr[..., 2] -= temp
+            img = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
+            
+        return ImageEnhance.Sharpness(img).enhance(self.varsharp.get())
+    
+    # ... Les autres méthodes (autoenhance, saveimage, etc.) restent inchangées ...
 
-    def auto_levels(self, img_array):
-        """Correction automatique des niveaux sur la luminance (LAB+CLAHE)"""
+    def autoenhance(self):
+        if self.originalimage is None: messagebox.showwarning("Aucune image", "Veuillez d'abord ouvrir une image."); return
+        arr = self.processautomatically(np.array(self.originalimage))
+        self.currentimage = Image.fromarray(arr)
+        self.varexpo.set(0); self.varcontrast.set(1); self.varsatur.set(1); self.vartemp.set(0); self.varsharp.set(1)
+        self.updateimage()
+
+    def saveimage(self):
+        if self.displayimage is None: messagebox.showwarning("Aucune image", "Veuillez d'abord ouvrir une image."); return
+        filepath = filedialog.asksaveasfilename(defaultextension=".jpg", filetypes=[("Fichiers JPEG", "*.jpg *.jpeg")])
+        if filepath:
+            self.displayimage.save(filepath, "JPEG", quality=95)
+            messagebox.showinfo("Info", "Image sauvegardée avec succès.")
+
+    def processautomatically(self, arr):
+        arr = self.balancewhite(arr)
+        return self.autolevels(arr)
+
+    def balancewhite(self, img_array):
+        mean = np.mean(img_array, axis=(0, 1))
+        scale = mean.mean() / (mean + 1e-8)
+        return np.clip(img_array.astype(np.float32) * scale, 0, 255).astype(np.uint8)
+
+    def autolevels(self, img_array):
         lab = cv2.cvtColor(img_array, cv2.COLOR_RGB2LAB)
         l, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
         l2 = clahe.apply(l)
-        out = cv2.merge([l2, a, b])
-        return cv2.cvtColor(out, cv2.COLOR_LAB2RGB)
+        return cv2.cvtColor(cv2.merge((l2, a, b)), cv2.COLOR_LAB2RGB)
 
-    def update_image(self, *args):
-        """Affiche la version courante avec tous les ajustements sliders"""
-        if self.current_image is None:
-            messagebox.showwarning("Aucune image", "Veuillez d'abord ouvrir une image.")
-            return
-        img = self.current_image.copy()
-        img = self.apply_sliders(img)
-        img_tk = self.pil_to_tk(img, (480, 360))
-        self.image_label.config(image=img_tk)
-        self.image_label.image = img_tk  # Pour ne pas perdre la référence
-        self.display_image = img         # Pour la sauvegarde
-
-    def apply_sliders(self, img):
-        """Applique les sliders de réglage manuels sur une image PIL"""
-        arr = np.array(img).astype(np.float32)
-        # Exposition (multiplicatif)
-        expo = self.var_expo.get()
-        arr = np.clip(arr * 2**expo, 0, 255)
-        img = Image.fromarray(arr.astype(np.uint8))
-        # Contraste
-        img = ImageEnhance.Contrast(img).enhance(self.var_contrast.get())
-        # Saturation
-        img = ImageEnhance.Color(img).enhance(self.var_satur.get())
-        # Température (modifie canaux R/B)
-        temp = self.var_temp.get()
-        arr = np.array(img).astype(np.float32)
-        arr[:,:,0] += temp   # Rouge
-        arr[:,:,2] -= temp   # Bleu
-        arr = np.clip(arr, 0, 255)
-        img = Image.fromarray(arr.astype(np.uint8))
-        # Netteté
-        img = ImageEnhance.Sharpness(img).enhance(self.var_sharp.get())
-        return img
-
-    def pil_to_tk(self, img, max_size):
-        """Convertit une image PIL pour affichage Tkinter avec réduction si besoin"""
-        img_disp = img.copy()
-        img_disp.thumbnail(max_size, Image.Resampling.LANCZOS)
-        return ImageTk.PhotoImage(img_disp)
-
-if __name__ == "__main__":
-    import sys
+if __name__ == '__main__':
     root = tk.Tk()
-    root.withdraw()  # Cache la fenêtre principale
-
-    ftypes = [("Fichiers JPEG", "*.jpg *.jpeg")]
-    file_path = filedialog.askopenfilename(title="Sélectionner une photo JPEG", filetypes=ftypes)
-
-    if not file_path:
-        sys.exit("Aucun fichier sélectionné.")
-
-    root.deiconify()  # Affiche la fenêtre principale
-
-    app = CameraRawLikeEditor(root)       # PAS de file_path ici !
-    app.open_image_path(file_path)        # <-- C'est ici qu'on passe le chemin sélectionné
+    app = CameraRawLikeEditor(root)
     root.mainloop()
-
-
-
-
